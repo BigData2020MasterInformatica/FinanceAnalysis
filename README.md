@@ -1,5 +1,5 @@
 # Project FinanSP
-FinanSP is a project aimed at studying the use of Apache Spark (dataframes, machine learning, structured streaming) to an application related to finance. The project is developed using PySpark.
+FinanSP is a project aimed at studying the use of Apache Spark (dataframes, machine learning, structured streaming) to an application related to finance. The main development tool is PySpark.
 
 ## Project goals
 The primary goals of the project are:
