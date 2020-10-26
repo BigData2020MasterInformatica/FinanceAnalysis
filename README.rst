@@ -1,7 +1,11 @@
-# Project FinanSP
+Project FinanSP
+===============
+
 FinanSP is a project aimed at studying the use of Apache Spark (dataframes, machine learning, structured streaming) to an application related to finance. The main development tool is PySpark.
 
-## Project goals
+Project goals
+-------------
+
 The primary goals of the project are:
 
 * Analyze websites that supply financial data to determine what information is available for free through an API.
@@ -11,7 +15,9 @@ The primary goals of the project are:
 * Develop a streaming application that gathers information from one or more data sources.
 * Use of GitHub features: version control, wiki, project, pull request.
 
-## Project development
+Project development
+-------------------
+
 The project will be develop in three iterations:
 
 * Iteration 1 (one week): Web site data analysis, data adquisition, simple statistical processing.
