@@ -10,5 +10,12 @@ The primary goals of the project are:
 * Apply clustering algorithms to a group of companies.
 * Develop a streaming application that gathers information from one or more data sources.
 
+## Project development
+The project will be develop in three iterations
+
+* Iteration 1 (one week): Web site data analysis, data gathering, simple statistical processing.
+* Iteration 2 (two weeks): Data wrangling, development of prototypes with simulated data.
+* Iteration 3 (two weeks): Development of the prediction, clustering, and streaming applications with real data.
+* Final reports: Summary of the conducted work.
 
 
