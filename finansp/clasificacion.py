@@ -15,7 +15,7 @@ if __name__ == "__main__":
     dataset = spark_session\
         .read\
         .format("libsvm")\
-        .load("/Users/benjaminvegaherrera/Desktop/data/classificationDataLibsvm.txt")
+        .load("classificationDataLibsvm.txt")
 
     dataset.printSchema()
     dataset.show()
