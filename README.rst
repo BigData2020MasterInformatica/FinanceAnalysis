@@ -18,7 +18,7 @@ The primary goals of the project are:
 Project development
 -------------------
 
-The project will be develop in three iterations:
+The project will be developed in three iterations:
 
 * Iteration 1 (one week): Web site data analysis, data adquisition, simple statistical processing.
 * Iteration 2 (two weeks): Data wrangling, development of prototypes with simulated data.
