@@ -20,8 +20,8 @@ Project development
 
 The project will be developed in three iterations:
 
-* Iteration 1 (one week): Web site data analysis, data adquisition, simple statistical processing.
-* Iteration 2 (two weeks): Data wrangling, development of prototypes with simulated data.
+* Iteration 1 (one week): Web site data analysis, data adquisition, simple statistical processing, development of prototypes with simulated data.
+* Iteration 2 (two weeks): Data wrangling, development of prototypes with real data.
 * Iteration 3 (two weeks): Development of the prediction, clustering, and streaming applications with real data.
 * Final reports: Summary of the conducted work.
 
