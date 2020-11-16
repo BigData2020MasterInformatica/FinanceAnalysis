@@ -116,3 +116,6 @@ dask-worker-space
 .Rhistory
 
 .ipynb_checkpoints
+
+# Visual Studio Code
+.vscode
