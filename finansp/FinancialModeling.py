@@ -94,8 +94,22 @@ def getCompanyLastSevenDays(ticket):
     else:
         click.echo("No information of this company")
 
-
-
+def getCompany(ticket):
+    today = date.today()
+    starting_date = today - timedelta(days=2200)#1825)
+    start = starting_date.strftime("%Y-%m-%d")
+    end = today.strftime("%Y-%m-%d")
+    query = search_query_format.format( url, "/api/v3/historical-price-full/"+str(ticket)+"?from="+str(start)+"&to="+str(end), YOUR_API_KEY )
+    r = requests.get(query)
+    data = r.json()
+    # click.echo(data)
+    if data:
+        df = pd.DataFrame.from_dict(data["historical"])
+        # visualize(df)
+    else:
+        click.echo("No information of this company")
+    # print( "hi" )
+    return df
 
 cli.add_command(getCompanyInfo)
 cli.add_command(getCompanyHistory)
