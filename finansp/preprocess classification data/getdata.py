@@ -24,5 +24,5 @@ for i in names:
         query = search_query_format.format( url, url2, key )
         r = requests.get(query)
         #print(r.json())
-        jshit = r.json()
-        json.dump(jshit, write_file)
+        json_string = r.json()
+        json.dump(json_string, write_file)
