@@ -1,3 +1,5 @@
+#Benjamin Vega, Iuliana Ilie
+
 from pyspark.sql import SparkSession
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.evaluation import RegressionEvaluator
