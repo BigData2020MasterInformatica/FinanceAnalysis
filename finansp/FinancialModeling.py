@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import seaborn as sn
 from datetime import date
 from datetime import timedelta
+import numpy as np
+from sklearn.datasets import dump_svmlight_file
 
 url = "https://financialmodelingprep.com"
 YOUR_API_KEY = "442cb337e1223ef8e61fbca960b35d47" 
@@ -18,23 +20,27 @@ search_query_format = "{}/{}&apikey={}"
 def visualize(df):
     click.echo(df.tail())
     click.echo(df.describe())
-    input("Press any key to continue")
+    fig, ax = plt.subplots(figsize=(20,20))
     click.echo("Showing data distribution")
-    df.hist()
+    df.hist(ax = ax)
     plt.show()
-    input("Press any key to continue")
     click.echo("Looking for outliers")
+    plt.subplots(figsize=(20,20))
     df.boxplot()    
     plt.show()
-    input("Press any key to continue")
-    click.echo("Showing correlation between attributes")
+    plt.subplots(figsize=(20,20))
     corrMatrix = df.corr()
     sn.heatmap(corrMatrix, annot=True)
     plt.show()
 
+def dataframeToLibsvm(df):
+    df = df.drop(columns=['label', 'date'])
+    X =  df[np.setdiff1d(df.columns,['features','Target'])]
+    y = df.close
+    f = dump_svmlight_file(X,y,'smvlight.dat',zero_based=True,multilabel=False)
+    
+
 #CLI Implementation
-
-
 @click.group()
 def cli():
     pass
@@ -94,8 +100,19 @@ def getCompanyLastSevenDays(ticket):
     else:
         click.echo("No information of this company")
 
-
-
+def getCompany(ticket):
+    today = date.today()
+    starting_date = today - timedelta(days=1825)
+    start = starting_date.strftime("%Y-%m-%d")
+    end = today.strftime("%Y-%m-%d")
+    query = search_query_format.format( url, "/api/v3/historical-price-full/"+str(ticket)+"?from="+str(start)+"&to="+str(end), YOUR_API_KEY )
+    r = requests.get(query)
+    data = r.json()
+    if data:
+        df = pd.DataFrame.from_dict(data["historical"])
+    else:
+        print("No information of this company")
+    return df
 
 cli.add_command(getCompanyInfo)
 cli.add_command(getCompanyHistory)
@@ -105,5 +122,4 @@ cli.add_command(getCompanyLastSevenDays)
 
 if __name__ == '__main__':
     cli()
-
-
+    
