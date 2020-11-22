@@ -1,83 +1,90 @@
 import pandas as pd
 from fbprophet import Prophet
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
 from pyspark.sql import SparkSession
-
-from FinancialModeling import getCompany
-
-spark = SparkSession \
-        .builder \
-        .appName("TimeSeries") \
-        .config( "spark.driver.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true") \
-        .config('spark.sql.execution.arrow.enable', 'true') \
-        .getOrCreate()
-
-
-model_test = Prophet(
-    interval_width=0.95,
-    growth='linear',
-    daily_seasonality=True,
-    weekly_seasonality=True,
-    yearly_seasonality=True,
-    # seasonality_mode='multiplicative'
-)
-
-history_pd = getCompany( "AAPL" )
-history_pd["company"] = [ "AAPL" for i in range( history_pd.shape[0] ) ]
-history_pd_2 = getCompany( "GOOG" )
-history_pd_2["company"] = [ "GOOG" for i in range( history_pd_2.shape[0] ) ]
-
-history_pd = history_pd.append(history_pd_2)
-# print( history_pd_2 )
-
-history_pd_open = history_pd[['date', 'open']]
-history_pd_open = history_pd_open.rename(columns={'date': 'ds', 'open': 'y'})
-# print( history_pd_open )
-
-# df_test = history_pd_open.iloc[:-1, :]
-# # print(df_test)
-# model_test.fit( df_test )
-
-# def stan_init( m ):
-#     res = {}
-#     for pname in ['k', 'm', 'sigma_obs']:
-#         res[pname] = m.params[pname][0][0]
-#     for pname in ['delta', 'beta']:
-#         res[pname] = m.params[pname][0]
-#     return res
-
-# model = Prophet(
-#     interval_width=0.95,
-#     growth='linear',
-#     daily_seasonality=True,
-#     weekly_seasonality=True,
-#     yearly_seasonality=True,
-#     # seasonality_mode='multiplicative'
-# )
-
-# model.fit( history_pd_open, init=stan_init( model_test ) )
-
-# future_pd = model.make_future_dataframe(
-#     periods=365,
-#     freq='d',
-#     include_history=True
-# )
-
-# forecast_pd = model.predict( future_pd )
-# predict_fig = model.plot( forecast_pd, xlabel='date', ylabel='open')
-# # components_fig = model.plot_components( forecast_pd )
-
-# from fbprophet.plot import add_changepoints_to_plot
-# a = add_changepoints_to_plot( predict_fig.gca(), model, forecast_pd )
-
-# plt.show(block=True)
-
-# print( "SUCCESS" )
-
+from pyspark.sql.functions import current_date
 from pyspark.sql.functions import pandas_udf, PandasUDFType, sum, max, col, concat, lit
 from pyspark.sql.types import *
 
-schema = StructType([
+from finansp.FinancialModeling import getCompany
+
+__INTERVAL_WIDTH = 0
+__PERIODS = 0
+__SHOW_CHARTS = False
+
+def predict( company_list = [], value_to_predict = "open",
+ periods_to_predict = 90, interval_width = 0.95, show_charts = False, number_of_days = 2200 ):
+    """
+        Predict a the specified value, `value_to_predict`, for each company in the
+        list `company_list` in the next `periods_to_predict` days, with an `interval_width`
+        using the `last_days`. You can show graph by setting `show_charts` to True.
+
+        Values to predict:
+            - "open"
+            - "close"
+            - "high"
+            - "low"
+            - "close"
+            - "volume"
+            - "unadjustedVolume"
+            - "change"
+            - "changePercent"
+            - "vwap"
+            - "changeOverTime"
+    """
+    global __INTERVAL_WIDTH, __PERIODS, __SHOW_CHARTS
+
+    # Preparing data
+    history = None
+    for company in company_list:
+
+        tmp_history = getCompany( company, number_of_days )
+        tmp_history["company"] = [ company for i in range( tmp_history.shape[0] )]
+
+        if history is None:
+
+            history = tmp_history.copy()
+        else:
+
+            history = history.append( tmp_history )
+    
+    if history is not None:
+
+        __INTERVAL_WIDTH = interval_width
+        __PERIODS = periods_to_predict
+        __SHOW_CHARTS = show_charts
+
+        spark = SparkSession \
+            .builder \
+            .appName("TimeSeries") \
+            .config( "spark.driver.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true") \
+            .config('spark.sql.execution.arrow.enable', 'true') \
+            .getOrCreate()
+
+
+        df = spark.createDataFrame( history ) \
+            .dropna()
+        df = df.select(
+            df['date'].alias('ds'),
+            df[value_to_predict].alias('y'),
+            df['company'].cast( StringType() )
+        )
+
+        results = (
+            df
+            .groupBy( 'company' )
+            .apply(__forecast_store_item)
+            .withColumn( 'training_date', current_date() )
+        )
+
+        return results.toPandas()
+    else:
+
+        print( "Something was wrong...")
+        return None
+
+
+__schema = StructType([
         # 0   ds                          92 non-null     datetime64[ns]
         StructField("ds", DateType(), True),
         # 18  yhat                        92 non-null     float64 
@@ -121,82 +128,38 @@ schema = StructType([
         StructField("additive_terms_lower", FloatType(), True),
         # 17  additive_terms_upper        92 non-null     float64       
         StructField("additive_terms_upper", FloatType(), True),
- 
+        StructField("company", StringType(), True )
     ])
-@pandas_udf(schema, PandasUDFType.GROUPED_MAP)
-def forecast_store_item(history):
-
+@pandas_udf(__schema, PandasUDFType.GROUPED_MAP)
+def __forecast_store_item( history ):
+    
+    global __INTERVAL_WIDTH, __PERIODS, __SHOW_CHARTS
+    
     # instantiate the model, configure the parameters
     model = Prophet(
-        interval_width=0.95,
+        interval_width=__INTERVAL_WIDTH,
         growth='linear',
         daily_seasonality=True,
         weekly_seasonality=True,
-        yearly_seasonality=True,
-        # seasonality_mode='multiplicative'
+        yearly_seasonality=True
     )
 
     # fit the model
-    model.fit(history)
+    model.fit( history )
 
     # configure predictions
     future_pd = model.make_future_dataframe(
-        periods=90,
+        periods=__PERIODS,
         freq='d',
         include_history=True
     )
-
+    
     # make predictions
     results_pd = model.predict(future_pd)
+    results_pd["company"] = history["company"][0]
 
-    predict_fig = model.plot( results_pd, xlabel='date-'+history['company'][0], ylabel='open' )
-    plt.show(block=True)
-
-    # return predictions
-    # print( results_pd.info() )
+    if __SHOW_CHARTS:
+        model.plot( results_pd, xlabel='date-'+history['company'][0], ylabel='open' )
+        plt.show(block=True)
+    
     return results_pd
-
-import math
-
-if history_pd.shape[0] % 2 != 0:
-    history_pd = history_pd.iloc[:-1,:]
-
-# history_pd["pairs"] = [ math.floor( i / 100 ) for i in range( history_pd.shape[0] ) ]
-# print( history_pd )
-
-df = spark.createDataFrame( history_pd )
-
-# # print( df.count() )
-
-df = df.dropna()
-
-df = df.select(
-    df['date'].alias('ds'),#.cast(DateType()).alias('ds'),
-    df['open'].alias('y'),#.cast(FloatType()).alias('y'),
-    df['company'].cast(StringType())
-)
-
-# # print( df.count() )
-df.printSchema()
-
-from pyspark.sql.functions import current_date
-
-results = (
-    df
-    .groupBy( 'company' )
-    # .map(lambda d: pd.DataFrame( [d], columns=['ds', 'y']))
-    # .reduce( lambda d1, d2: d1.append(d2) )
-    # .filter(lambda d: len(d['ds']) >= 2)
-    # .reduce(lambda d1, d2: forecast_store_item( d1.append(d2) ) )
-    # .map(lambda d: forecast_store_item( d ) )
-    # .withColumn('training_date', current_date())
-    .apply(forecast_store_item)
-    .withColumn('training_date', current_date())
-    )
-
-# results = spark.createDataFrame(results, schema)
-
-print( type( results ) )
-
-## REMEMBER: export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
-print( results.toPandas() )

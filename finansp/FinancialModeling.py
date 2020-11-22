@@ -11,10 +11,7 @@ YOUR_API_KEY = "442cb337e1223ef8e61fbca960b35d47"
 query_format = "{}/{}?apikey={}"
 search_query_format = "{}/{}&apikey={}"
 
-
-
 #Aditional functions
-
 def visualize(df):
     click.echo(df.tail())
     click.echo(df.describe())
@@ -94,9 +91,9 @@ def getCompanyLastSevenDays(ticket):
     else:
         click.echo("No information of this company")
 
-def getCompany(ticket):
+def getCompany(ticket, number_of_days):
     today = date.today()
-    starting_date = today - timedelta(days=2200)#1825)
+    starting_date = today - timedelta(days=number_of_days)
     start = starting_date.strftime("%Y-%m-%d")
     end = today.strftime("%Y-%m-%d")
     query = search_query_format.format( url, "/api/v3/historical-price-full/"+str(ticket)+"?from="+str(start)+"&to="+str(end), YOUR_API_KEY )
