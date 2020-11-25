@@ -3,14 +3,18 @@ import finansp.time_series as ts
 import click
 import pandas as pd
 
+@click.group()
+def cli():
+    pass
+
 @click.command()
-@click.option( '-v', '--value_to_predict', default="open", help='Value to predict.' )
-@click.option( '-p', '--periods_to_predict', default=90, help='Days to predict.' )
-@click.option( '-i', '--interval_width', default=0.95, help='Interval width for prediction.' )
-@click.option( '-d', '--last_days', default=2200, help='Days used for predicting.' )
-@click.option( '-s', '--show_charts', default=False, help='Show graphics.' )
-@click.option( '-o', '--output', default="output.csv", help='File to save the output.' )
-@click.argument('companies', nargs=-1, required=True)
+@click.option( '-v', '--value_to_predict', default="open", help='Value to predict.', show_default=True )
+@click.option( '-p', '--periods_to_predict', default=90, help='Days to predict.', show_default=True )
+@click.option( '-i', '--interval_width', default=0.95, help='Interval width for prediction.', show_default=True )
+@click.option( '-d', '--last_days', default=2200, help='Days used for predicting.', show_default=True )
+@click.option( '-s', '--show_charts', is_flag=True, default=False, help='Show graphics.', show_default=True )
+@click.option( '-o', '--output', default="output.csv", help='File to save the output.', show_default=True )
+@click.argument( 'companies', nargs=-1, required=True )
 def predict( companies, last_days, interval_width, value_to_predict, periods_to_predict, show_charts, output ):
     """
         Predict a the specified value, `value_to_predict`, for each company in the
@@ -22,7 +26,6 @@ def predict( companies, last_days, interval_width, value_to_predict, periods_to_
             - "close"\n
             - "high"\n
             - "low"\n
-            - "close"\n
             - "volume"\n
             - "unadjustedVolume"\n
             - "change"\n
@@ -41,6 +44,63 @@ def predict( companies, last_days, interval_width, value_to_predict, periods_to_
     )
 
     pdf.to_csv( output, index=False )
+    click.echo( f"{output} FILE CREATED.")
+
+@click.command()
+@click.option( '-v', '--value_to_predict', default="open", help='Value to predict.', show_default=True )
+@click.option( '-p', '--periods_to_predict', default=90, help='Days to predict.', show_default=True )
+@click.option( '-i', '--interval_width', default=0.95, help='Interval width for prediction.', show_default=True )
+@click.option( '-d', '--last_days', default=2200, help='Days used for predicting.', show_default=True )
+@click.option( '-s', '--show_charts', is_flag=True, default=False, help='Show graphics.', show_default=True )
+@click.option( '-o', '--output', default="output.csv", help='File to save the output.', show_default=True )
+@click.option( '-e', '--max_iter', default=1, help='Number of epochs to train models.', show_default=True )
+@click.option( '-h', '--hidden_layers', type=click.STRING, default="10,5", help='Hidden layers', show_default=True )
+@click.option( '-b', '--block_size', default=128, help='Batch size.', show_default=True )
+@click.option( '-S', '--seed', default=1234, help='Seed.', show_default=True )
+@click.option( '-v', '--val_split', default=0.2, help='Validation split', show_default=True )
+@click.argument( 'companies', nargs=-1, required=True )
+def should_I_buy( companies, max_iter, hidden_layers, block_size, seed, val_split, last_days, interval_width, value_to_predict, periods_to_predict, show_charts, output ):
+    """
+        Should you buy or sell? 0 - WAIT, 1 - BUY, 2 - SELL
+
+        This function tells you when to buy and sell using `predict` function and
+        MultiLayer Perceptron (MLP) to make `predictions` column. You can change the number 
+        of epochs to train your MLP model, `max_iter`, the number of `hidden_layers`, the batch size
+        ( `block_size` ) and the amount of data to be used in the validation set (`validation_split`).
+
+        You can select one of these values to make the predictions:\n
+            - "open"\n
+            - "close"\n
+            - "high"\n
+            - "low"\n
+            - "volume"\n
+            - "unadjustedVolume"\n
+            - "change"\n
+            - "changePercent"\n
+            - "vwap"\n
+            - "changeOverTime"\n
+    """
+    # Array of Hidden Layers
+    hidden_layers = [ int( hl.strip() ) for hl in hidden_layers.split(',')]
+    
+    pdf = ts.to_buy_or_not_to_buy( 
+        companies=companies, 
+        max_iter=max_iter,
+        hidden_layers=hidden_layers, 
+        blockSize=block_size,
+        seed=seed,
+        val_split=val_split, 
+        value_to_predict=value_to_predict,
+        periods_to_predict=periods_to_predict,
+        interval_width=interval_width,
+        show_charts=show_charts,
+        number_of_days=last_days
+    )
+
+    pdf.to_csv( output, index=False )
+    click.echo( f"{output} FILE CREATED.")
 
 if __name__ == '__main__':
-    predict()
+    cli.add_command(predict)
+    cli.add_command(should_I_buy)
+    cli()
