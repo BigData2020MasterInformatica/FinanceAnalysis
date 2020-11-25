@@ -187,7 +187,26 @@ def __forecast_store_item( history ):
 
 def to_buy_or_not_to_buy( companies=[], max_iter=1, hidden_layers=[10], blockSize=128, seed=1234, val_split=0.2, 
     value_to_predict="close", periods_to_predict=90, interval_width=0.95, show_charts=False, number_of_days=2200 ):
+    """
+        Should you buy or sell? 0 - WAIT, 1 - BUY, 2 - SELL
 
+        This function tells you when to buy and sell, using `predict` function and
+        MultiLayer Perceptron (MLP), in the `predictions` column. You can change the number 
+        of epochs to train your MLP model, `max_iter`, the number of `hidden_layers`, the batch size
+        ( `block_size` ) and the amount of data to be used in the validation set (`validation_split`).
+
+        You can select one of these values to make the predictions:\n
+            - "open"\n
+            - "close"\n
+            - "high"\n
+            - "low"\n
+            - "volume"\n
+            - "unadjustedVolume"\n
+            - "change"\n
+            - "changePercent"\n
+            - "vwap"\n
+            - "changeOverTime"\n
+    """
     global __MAX_ITER, __HIDDEN_LAYERS, __BLOCK_SIZE, __SEED, __VAL_SPLIT
 
     # Obtain predictions from predict function
