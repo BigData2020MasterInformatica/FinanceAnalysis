@@ -1,9 +1,14 @@
 import pandas as pd
-from fbprophet import Prophet
 import matplotlib.pyplot as plt
+
+from fbprophet import Prophet
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import current_date
-from pyspark.sql.functions import pandas_udf, PandasUDFType, sum, max, col, concat, lit
+from pyspark.ml.classification import MultilayerPerceptronClassifier
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.sql.functions import lead, isnull, when, monotonically_increasing_id, pandas_udf, PandasUDFType, current_date
+from pyspark.sql.window import Window
+from pyspark.ml.linalg import Vectors
+from pyspark.ml.feature import VectorAssembler
 from pyspark.sql.types import *
 
 from finansp.FinancialModeling import getCompany
@@ -11,6 +16,70 @@ from finansp.FinancialModeling import getCompany
 __INTERVAL_WIDTH = 0
 __PERIODS = 0
 __SHOW_CHARTS = False
+__MAX_ITER = 1
+__HIDDEN_LAYERS = [10]
+__BLOCK_SIZE = 128
+__SEED = 1234
+__VAL_SPLIT = 0.2
+
+__schema = StructType([
+    StructField("ds", DateType(), True),
+    StructField("yhat", FloatType(), True),
+    StructField("trend", FloatType(), True),
+    StructField("yhat_lower", FloatType(), True),
+    StructField("yhat_upper", FloatType(), True),
+    StructField("trend_lower", FloatType(), True),
+    StructField("trend_upper", FloatType(), True),
+    StructField("multiplicative_terms", FloatType(), True),
+    StructField("multiplicative_terms_lower", FloatType(), True),
+    StructField("multiplicative_terms_upper", FloatType(), True),
+    StructField("daily", FloatType(), True),
+    StructField("daily_lower", FloatType(), True),   
+    StructField("daily_upper", FloatType(), True),
+    StructField("weekly", FloatType(), True),
+    StructField("weekly_lower", FloatType(), True),
+    StructField("weekly_upper", FloatType(), True),
+    StructField("yearly", FloatType(), True),
+    StructField("yearly_lower", FloatType(), True),
+    StructField("yearly_upper", FloatType(), True),
+    StructField("additive_terms", FloatType(), True),
+    StructField("additive_terms_lower", FloatType(), True),
+    StructField("additive_terms_upper", FloatType(), True),
+    StructField("company", StringType(), True )
+])
+__schema_buy = StructType([
+    StructField("ds", DateType(), True),
+    StructField("yhat", FloatType(), True),
+    StructField("trend", FloatType(), True),
+    StructField("yhat_lower", FloatType(), True),
+    StructField("yhat_upper", FloatType(), True),
+    StructField("trend_lower", FloatType(), True),
+    StructField("trend_upper", FloatType(), True),
+    StructField("multiplicative_terms", FloatType(), True),   
+    StructField("multiplicative_terms_lower", FloatType(), True),
+    StructField("multiplicative_terms_upper", FloatType(), True),
+    StructField("daily", FloatType(), True),
+    StructField("daily_lower", FloatType(), True),
+    StructField("daily_upper", FloatType(), True),
+    StructField("weekly", FloatType(), True),
+    StructField("weekly_lower", FloatType(), True),
+    StructField("weekly_upper", FloatType(), True),
+    StructField("yearly", FloatType(), True),
+    StructField("yearly_lower", FloatType(), True),
+    StructField("yearly_upper", FloatType(), True),
+    StructField("additive_terms", FloatType(), True),
+    StructField("additive_terms_lower", FloatType(), True),
+    StructField("additive_terms_upper", FloatType(), True),
+    StructField("company", StringType(), True ),
+    StructField("training_date", DateType(), True ),
+    StructField("label", IntegerType(), True ),
+    StructField("id", IntegerType(), True ),
+    StructField("yhat_next", FloatType(), True ),
+    StructField("features", ArrayType(FloatType()), True ),
+    StructField("rawPrediction", ArrayType(FloatType()), True ),
+    StructField("probability", ArrayType(FloatType()), True ),
+    StructField("prediction", FloatType(), True ),
+])
 
 def predict( company_list = [], value_to_predict = "open",
  periods_to_predict = 90, interval_width = 0.95, show_charts = False, number_of_days = 2200 ):
@@ -24,7 +93,6 @@ def predict( company_list = [], value_to_predict = "open",
             - "close"
             - "high"
             - "low"
-            - "close"
             - "volume"
             - "unadjustedVolume"
             - "change"
@@ -83,59 +151,12 @@ def predict( company_list = [], value_to_predict = "open",
         print( "Something was wrong...")
         return None
 
-
-__schema = StructType([
-        # 0   ds                          92 non-null     datetime64[ns]
-        StructField("ds", DateType(), True),
-        # 18  yhat                        92 non-null     float64 
-        StructField("yhat", FloatType(), True),
-        # 1   trend                       92 non-null     float64   
-        StructField("trend", FloatType(), True),
-        # 2   yhat_lower                  92 non-null     float64       
-        StructField("yhat_lower", FloatType(), True),
-        # 3   yhat_upper                  92 non-null     float64       
-        StructField("yhat_upper", FloatType(), True),
-        # 4   trend_lower                 92 non-null     float64       
-        StructField("trend_lower", FloatType(), True),
-        # 5   trend_upper                 92 non-null     float64       
-        StructField("trend_upper", FloatType(), True),
-        # 6   multiplicative_terms        92 non-null     float64       
-        StructField("multiplicative_terms", FloatType(), True),
-        # 7   multiplicative_terms_lower  92 non-null     float64       
-        StructField("multiplicative_terms_lower", FloatType(), True),
-        # 8   multiplicative_terms_upper  92 non-null     float64       
-        StructField("multiplicative_terms_upper", FloatType(), True),
-        StructField("daily", FloatType(), True),
-        # 10  weekly_lower                92 non-null     float64       
-        StructField("daily_lower", FloatType(), True),
-        # 11  weekly_upper                92 non-null     float64       
-        StructField("daily_upper", FloatType(), True),
-        # 9   weekly                      92 non-null     float64       
-        StructField("weekly", FloatType(), True),
-        # 10  weekly_lower                92 non-null     float64       
-        StructField("weekly_lower", FloatType(), True),
-        # 11  weekly_upper                92 non-null     float64       
-        StructField("weekly_upper", FloatType(), True),
-        # 12  yearly                      92 non-null     float64       
-        StructField("yearly", FloatType(), True),
-        # 13  yearly_lower                92 non-null     float64       
-        StructField("yearly_lower", FloatType(), True),
-        # 14  yearly_upper                92 non-null     float64       
-        StructField("yearly_upper", FloatType(), True),
-        # 15  additive_terms              92 non-null     float64       
-        StructField("additive_terms", FloatType(), True),
-        # 16  additive_terms_lower        92 non-null     float64       
-        StructField("additive_terms_lower", FloatType(), True),
-        # 17  additive_terms_upper        92 non-null     float64       
-        StructField("additive_terms_upper", FloatType(), True),
-        StructField("company", StringType(), True )
-    ])
 @pandas_udf(__schema, PandasUDFType.GROUPED_MAP)
 def __forecast_store_item( history ):
     
     global __INTERVAL_WIDTH, __PERIODS, __SHOW_CHARTS
     
-    # instantiate the model, configure the parameters
+    # Instantiate the model, configure the parameters
     model = Prophet(
         interval_width=__INTERVAL_WIDTH,
         growth='linear',
@@ -144,17 +165,17 @@ def __forecast_store_item( history ):
         yearly_seasonality=True
     )
 
-    # fit the model
+    # Fit the model
     model.fit( history )
 
-    # configure predictions
+    # Configure predictions
     future_pd = model.make_future_dataframe(
         periods=__PERIODS,
         freq='d',
         include_history=True
     )
     
-    # make predictions
+    # Make predictions
     results_pd = model.predict(future_pd)
     results_pd["company"] = history["company"][0]
 
@@ -163,3 +184,99 @@ def __forecast_store_item( history ):
         plt.show(block=True)
     
     return results_pd
+
+def to_buy_or_not_to_buy( companies=[], max_iter=1, hidden_layers=[10], blockSize=128, seed=1234, val_split=0.2, 
+    value_to_predict="close", periods_to_predict=90, interval_width=0.95, show_charts=False, number_of_days=2200 ):
+
+    global __MAX_ITER, __HIDDEN_LAYERS, __BLOCK_SIZE, __SEED, __VAL_SPLIT
+
+    # Obtain predictions from predict function
+    pdf = predict( 
+        company_list = companies,
+        value_to_predict = value_to_predict,
+        periods_to_predict = periods_to_predict,
+        interval_width = interval_width,
+        show_charts = show_charts, 
+        number_of_days = number_of_days
+    )
+
+    __MAX_ITER = max_iter
+    __HIDDEN_LAYERS = hidden_layers
+    __BLOCK_SIZE = blockSize
+    __SEED = seed
+    __VAL_SPLIT = val_split
+
+    spark = SparkSession \
+        .builder \
+        .appName("TimeSeries") \
+        .config( "spark.driver.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true") \
+        .config('spark.sql.execution.arrow.enable', 'true') \
+        .getOrCreate()
+
+    df = spark.createDataFrame( pdf ) \
+        .withColumn("id", monotonically_increasing_id() )
+    
+    results = (
+        df
+        .groupBy( 'company' )
+        .apply(__buy_or_not_buy_prediction)
+    )
+
+    return results.toPandas()
+
+@pandas_udf(__schema_buy, PandasUDFType.GROUPED_MAP)
+def __buy_or_not_buy_prediction( history ):
+    
+    global __MAX_ITER, __HIDDEN_LAYERS, __BLOCK_SIZE, __SEED, __VAL_SPLIT
+
+    spark = SparkSession \
+        .builder \
+        .appName("TimeSeries") \
+        .config( "spark.driver.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true") \
+        .config('spark.sql.execution.arrow.enable', 'true') \
+        .getOrCreate()
+
+    df = spark.createDataFrame(history)
+
+    # Get a window
+    w = Window().partitionBy().orderBy("id")
+    # Lead-shift using window
+    df = df.withColumn("yhat_next", lead(df.yhat).over(w))
+
+    # 1 BUY # 0 WAIT # 2 SELL
+    df = df.withColumn("label", when(isnull(df.yhat - df.yhat_next), 0).otherwise(
+            when( df.yhat < df.yhat_next, 1).otherwise( 2 )
+        )).dropna()
+    
+    # Obtain `features` column
+    assembler = VectorAssembler(
+        inputCols=[ "yhat", "trend", "yhat_lower", "yhat_upper",
+        "trend_lower", "trend_upper", "multiplicative_terms",
+        "multiplicative_terms_upper", "multiplicative_terms_lower",
+        "daily", "daily_lower", "daily_upper", "weekly",
+        "weekly_lower", "weekly_upper", "yearly", "yearly_lower", "yearly_upper",
+        "additive_terms", "additive_terms_lower", "additive_terms_upper" ],
+        outputCol="features"
+    )
+    df = assembler.transform( df )
+
+    # Get train and test data
+    splits = df.randomSplit( [1 - __VAL_SPLIT, __VAL_SPLIT], __SEED ) 
+    train = splits[0]
+    test = splits[1]
+
+    # Hidden layers
+    layers = [21]
+    layers.extend( __HIDDEN_LAYERS )
+    layers.append( 3 )
+
+    # Create the trainer and set its parameters
+    trainer = MultilayerPerceptronClassifier(maxIter=__MAX_ITER, layers=layers, blockSize=__BLOCK_SIZE, seed=__SEED)
+
+    # Train the model
+    model = trainer.fit(train)
+
+    # Compute accuracy on the test set
+    result = model.transform(test)
+
+    return result.toPandas()
