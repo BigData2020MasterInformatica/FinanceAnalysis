@@ -63,8 +63,8 @@ def should_I_buy( companies, max_iter, hidden_layers, block_size, seed, val_spli
     """
         Should you buy or sell? 0 - WAIT, 1 - BUY, 2 - SELL
 
-        This function tells you when to buy and sell using `predict` function and
-        MultiLayer Perceptron (MLP) to make `predictions` column. You can change the number 
+        This function tells you when to buy and sell, using `predict` function and
+        MultiLayer Perceptron (MLP), in the `predictions` column. You can change the number 
         of epochs to train your MLP model, `max_iter`, the number of `hidden_layers`, the batch size
         ( `block_size` ) and the amount of data to be used in the validation set (`validation_split`).
 
