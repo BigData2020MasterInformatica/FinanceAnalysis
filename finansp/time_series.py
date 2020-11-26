@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 from fbprophet import Prophet
 from pyspark.sql import SparkSession
-from pyspark.ml.classification import MultilayerPerceptronClassifier
+from pyspark.ml.classification import MultilayerPerceptronClassifier,RandomForestClassifier, GBTClassifier, DecisionTreeClassifier, LinearSVC
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.sql.functions import lead, isnull, when, monotonically_increasing_id, pandas_udf, PandasUDFType, current_date
 from pyspark.sql.window import Window
@@ -186,14 +186,19 @@ def __forecast_store_item( history ):
     return results_pd
 
 def to_buy_or_not_to_buy( companies=[], max_iter=1, hidden_layers=[10], blockSize=128, seed=1234, val_split=0.2, 
-    value_to_predict="close", periods_to_predict=90, interval_width=0.95, show_charts=False, number_of_days=2200 ):
+    value_to_predict="close", periods_to_predict=90, interval_width=0.95, show_charts=False, number_of_days=2200,
+    classifier_type="mlp", max_depth=5, max_bins=10, min_instances_per_node=1, num_trees=20 ):
     """
         Should you buy or sell? 0 - WAIT, 1 - BUY, 2 - SELL
 
-        This function tells you when to buy and sell, using `predict` function and
-        MultiLayer Perceptron (MLP), in the `predictions` column. You can change the number 
-        of epochs to train your MLP model, `max_iter`, the number of `hidden_layers`, the batch size
+        This function tells you when to buy and sell, using `predict` function and a classifier
+        ( MultiLayer Perceptron (MLP) by default), in the `predictions` column. You can change the number 
+        of epochs to train your classifier, `max_iter`, the number of `hidden_layers`, the batch size
         ( `block_size` ) and the amount of data to be used in the validation set (`validation_split`).
+
+        You can also select some Tree Algorithms to predict and change their parameters:\n
+            - RandomForest (`rf`)
+            - DecisionTree (`dt`)
 
         You can select one of these values to make the predictions:\n
             - "open"\n
@@ -207,7 +212,8 @@ def to_buy_or_not_to_buy( companies=[], max_iter=1, hidden_layers=[10], blockSiz
             - "vwap"\n
             - "changeOverTime"\n
     """
-    global __MAX_ITER, __HIDDEN_LAYERS, __BLOCK_SIZE, __SEED, __VAL_SPLIT
+    global __MAX_ITER, __HIDDEN_LAYERS, __BLOCK_SIZE, __SEED, __VAL_SPLIT, \
+        __CLASSIFIER_TYPE, __MAX_DEPTH, __MAX_BINS, __MIN_INSTANCES_PER_NODE, __NUM_TREES#, __REG_PARAM
 
     # Obtain predictions from predict function
     pdf = predict( 
@@ -215,7 +221,7 @@ def to_buy_or_not_to_buy( companies=[], max_iter=1, hidden_layers=[10], blockSiz
         value_to_predict = value_to_predict,
         periods_to_predict = periods_to_predict,
         interval_width = interval_width,
-        show_charts = show_charts, 
+        show_charts = show_charts,
         number_of_days = number_of_days
     )
 
@@ -224,6 +230,12 @@ def to_buy_or_not_to_buy( companies=[], max_iter=1, hidden_layers=[10], blockSiz
     __BLOCK_SIZE = blockSize
     __SEED = seed
     __VAL_SPLIT = val_split
+    __CLASSIFIER_TYPE = classifier_type
+    __MAX_DEPTH = max_depth
+    __MAX_BINS = max_bins
+    __MIN_INSTANCES_PER_NODE = min_instances_per_node
+    __NUM_TREES = num_trees
+    # __REG_PARAM = reg_param
 
     spark = SparkSession \
         .builder \
@@ -246,7 +258,8 @@ def to_buy_or_not_to_buy( companies=[], max_iter=1, hidden_layers=[10], blockSiz
 @pandas_udf(__schema_buy, PandasUDFType.GROUPED_MAP)
 def __buy_or_not_buy_prediction( history ):
     
-    global __MAX_ITER, __HIDDEN_LAYERS, __BLOCK_SIZE, __SEED, __VAL_SPLIT
+    global __MAX_ITER, __HIDDEN_LAYERS, __BLOCK_SIZE, __SEED, __VAL_SPLIT, \
+        __CLASSIFIER_TYPE, __MAX_DEPTH, __MAX_BINS, __MIN_INSTANCES_PER_NODE, __NUM_TREES#, __REG_PARAM
 
     spark = SparkSession \
         .builder \
@@ -290,8 +303,45 @@ def __buy_or_not_buy_prediction( history ):
     layers.append( 3 )
 
     # Create the trainer and set its parameters
-    trainer = MultilayerPerceptronClassifier(maxIter=__MAX_ITER, layers=layers, blockSize=__BLOCK_SIZE, seed=__SEED)
+    if __CLASSIFIER_TYPE == "rf": # Random Forest
 
+        trainer = RandomForestClassifier( 
+            maxDepth=__MAX_DEPTH, 
+            maxBins=__MAX_BINS,
+            seed=__SEED,
+            minInstancesPerNode=__MIN_INSTANCES_PER_NODE,
+            numTrees=__NUM_TREES
+        )
+    # elif __CLASSIFIER_TYPE == "gbt": # Gradient-Boosted Tree
+    #     trainer = GBTClassifier( 
+    #         maxDepth=__MAX_DEPTH,
+    #         maxBins=__MAX_BINS,
+    #         minInstancesPerNode=__MIN_INSTANCES_PER_NODE,
+    #         maxIter=__MAX_ITER,
+    #         seed=__SEED
+    #     )
+    elif __CLASSIFIER_TYPE == "dt": # Decision Tree
+
+        trainer = DecisionTreeClassifier(
+            maxDepth=__MAX_DEPTH,
+            maxBins=__MAX_BINS,
+            minInstancesPerNode=__MIN_INSTANCES_PER_NODE,
+            seed=__SEED
+        )
+    # elif __CLASSIFIER_TYPE == "svc": # LinearSVC
+
+    #     trainer = LinearSVC(
+    #         maxIter=__MAX_ITER,
+    #         regParam=__REG_PARAM
+    #     )
+    else:
+
+        trainer = MultilayerPerceptronClassifier(
+            maxIter=__MAX_ITER,
+            layers=layers, 
+            blockSize=__BLOCK_SIZE, 
+            seed=__SEED
+        )
     # Train the model
     model = trainer.fit(train)
 
